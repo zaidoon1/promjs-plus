@@ -31,6 +31,73 @@ describe("Registry", () => {
     expect(registry.metrics()).equals(desired);
   });
 
+  it("renders fractional histogram buckets in ascending order with cumulative counts", () => {
+    const reg = new Registry();
+    const h = reg.create("histogram", "latency", "", [0.1, 0.5, 1, 2.5, 10]);
+    for (const value of [0.0625, 0.25, 0.75, 2, 5, 20]) {
+      h.observe(value);
+    }
+
+    let desired = "# TYPE latency histogram\n";
+    desired += "latency_count 6\n";
+    desired += "latency_sum 28.0625\n";
+    desired += 'latency_bucket{le="0.1"} 1\n';
+    desired += 'latency_bucket{le="0.5"} 2\n';
+    desired += 'latency_bucket{le="1"} 3\n';
+    desired += 'latency_bucket{le="2.5"} 4\n';
+    desired += 'latency_bucket{le="10"} 5\n';
+    desired += 'latency_bucket{le="+Inf"} 6\n';
+    expect(reg.metrics()).equals(desired);
+
+    // counts observed after a scrape show up in the next one
+    h.observe(0.3);
+    expect(reg.metrics()).contains('latency_bucket{le="0.5"} 3\n');
+    expect(reg.metrics()).contains('latency_bucket{le="+Inf"} 7\n');
+
+    // and a reset series comes out in the same order
+    reg.reset();
+    h.observe(2, { path: "/a" });
+    let labelled = 'latency_count{path="/a"} 1\n';
+    labelled += 'latency_sum{path="/a"} 2\n';
+    labelled += 'latency_bucket{le="0.1",path="/a"} 0\n';
+    labelled += 'latency_bucket{le="0.5",path="/a"} 0\n';
+    labelled += 'latency_bucket{le="1",path="/a"} 0\n';
+    labelled += 'latency_bucket{le="2.5",path="/a"} 1\n';
+    labelled += 'latency_bucket{le="10",path="/a"} 1\n';
+    labelled += 'latency_bucket{le="+Inf",path="/a"} 1\n';
+    expect(reg.metrics()).contains(labelled);
+  });
+
+  it("treats an Infinity bound as the implicit +Inf bucket", () => {
+    const reg = new Registry();
+    const h = reg.create("histogram", "latency", "", [0.1, 1, Infinity]);
+    for (const value of [0.05, 0.5, 5]) {
+      h.observe(value);
+    }
+
+    let desired = "# TYPE latency histogram\n";
+    desired += "latency_count 3\n";
+    desired += "latency_sum 5.55\n";
+    desired += 'latency_bucket{le="0.1"} 1\n';
+    desired += 'latency_bucket{le="1"} 2\n';
+    desired += 'latency_bucket{le="+Inf"} 3\n';
+    expect(reg.metrics()).equals(desired);
+  });
+
+  it("renders a repeated bound once", () => {
+    const reg = new Registry();
+    const h = reg.create("histogram", "latency", "", [1, 0.5, 1]);
+    h.observe(0.75);
+
+    let desired = "# TYPE latency histogram\n";
+    desired += "latency_count 1\n";
+    desired += "latency_sum 0.75\n";
+    desired += 'latency_bucket{le="0.5"} 0\n';
+    desired += 'latency_bucket{le="1"} 1\n';
+    desired += 'latency_bucket{le="+Inf"} 1\n';
+    expect(reg.metrics()).equals(desired);
+  });
+
   it("clear all the metrics", () => {
     counter.inc();
     registry.clear();

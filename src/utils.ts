@@ -13,6 +13,7 @@ function getLabelPairs(
 export function formatHistogramOrSummary(
   name: string,
   metric: Metric<HistogramValue>,
+  bucketKeys: readonly string[],
   bucketLabel = "le",
   defaultLabels: Labels = {},
 ): string {
@@ -26,16 +27,18 @@ export function formatHistogramOrSummary(
     str += `${name}_sum ${metric.value.sum}\n`;
   }
 
-  // Compute cumulative counts from raw bucket counts
+  // Compute cumulative counts from raw bucket counts, smallest bound first.
+  // Walk bucketKeys rather than the entries object: JS lists integer-like keys
+  // ("1", "10") ahead of all others, so "0.5" and "+Inf" would come after "10".
+  // +Inf holds every observation, so its cumulative count is _count.
+  const { entries } = metric.value;
+  const labelSuffix = labels.length > 0 ? `,${labels}` : "";
   let cumulative = 0;
-  for (const [bucket, count] of Object.entries(metric.value.entries)) {
-    cumulative += count;
-    if (labels.length > 0) {
-      str += `${name}_bucket{${bucketLabel}="${bucket}",${labels}} ${cumulative}\n`;
-    } else {
-      str += `${name}_bucket{${bucketLabel}="${bucket}"} ${cumulative}\n`;
-    }
+  for (const bucket of bucketKeys) {
+    cumulative += entries[bucket];
+    str += `${name}_bucket{${bucketLabel}="${bucket}"${labelSuffix}} ${cumulative}\n`;
   }
+  str += `${name}_bucket{${bucketLabel}="+Inf"${labelSuffix}} ${metric.value.count}\n`;
 
   return str;
 }

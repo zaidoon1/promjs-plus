@@ -141,6 +141,7 @@ export class Registry {
                 ? formatHistogramOrSummary(
                     name,
                     value as Metric<HistogramValue>,
+                    (metric.instance as Histogram).bucketKeys,
                     "le",
                     this._defaultLabels,
                   )

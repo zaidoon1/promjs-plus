@@ -16,8 +16,8 @@ describe("utils", () => {
   });
 
   it("formats a histogram metric", () => {
-    // Raw bucket counts: 200: 0, 300: 2, 400: 0, 500: 0
-    // Cumulative output: 200: 0, 300: 2, 400: 2, 500: 2
+    // Raw bucket counts: 200: 0, 300: 2, 400: 0, 500: 0, +Inf: 0
+    // Cumulative output: 200: 0, 300: 2, 400: 2, 500: 2, +Inf: 2
     let desired = "";
     desired += "my_histogram_count 2\n";
     desired += "my_histogram_sum 501\n";
@@ -25,18 +25,22 @@ describe("utils", () => {
     desired += 'my_histogram_bucket{le="300"} 2\n';
     desired += 'my_histogram_bucket{le="400"} 2\n';
     desired += 'my_histogram_bucket{le="500"} 2\n';
+    desired += 'my_histogram_bucket{le="+Inf"} 2\n';
+    const bucketKeys = ["200", "300", "400", "500"];
     const simple = {
       value: {
         sum: 501,
         count: 2,
-        entries: { 200: 0, 300: 2, 400: 0, 500: 0 },
+        entries: { 200: 0, 300: 2, 400: 0, 500: 0, "+Inf": 0 },
       },
     };
     const complex = {
       ...simple,
       labels: { instance: "some_instance", ok: "true" },
     };
-    expect(formatHistogramOrSummary("my_histogram", simple)).equals(desired);
+    expect(formatHistogramOrSummary("my_histogram", simple, bucketKeys)).equals(
+      desired,
+    );
 
     desired = 'my_histogram_count{instance="some_instance",ok="true"} 2\n';
     desired += 'my_histogram_sum{instance="some_instance",ok="true"} 501\n';
@@ -48,7 +52,11 @@ describe("utils", () => {
       'my_histogram_bucket{le="400",instance="some_instance",ok="true"} 2\n';
     desired +=
       'my_histogram_bucket{le="500",instance="some_instance",ok="true"} 2\n';
+    desired +=
+      'my_histogram_bucket{le="+Inf",instance="some_instance",ok="true"} 2\n';
 
-    expect(formatHistogramOrSummary("my_histogram", complex)).equals(desired);
+    expect(formatHistogramOrSummary("my_histogram", complex, bucketKeys)).equals(
+      desired,
+    );
   });
 });
